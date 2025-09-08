@@ -168,7 +168,7 @@ impl Board {
 #[cfg(test)]
 mod tests {
     use crate::{
-        board::{self, Board, Position},
+        board::{Board, Position},
         piece::{Piece, PieceColor, PieceType},
     };
 
@@ -179,26 +179,22 @@ mod tests {
             piece_type: PieceType::Knight,
             color: PieceColor::Black,
         };
-        let black_knight_position = Position {file: 2, rank: 4};
+        let black_knight_position = Position { file: 2, rank: 4 };
         let white_rook = Piece {
             piece_type: PieceType::Rook,
             color: PieceColor::White,
         };
-        let white_rook_position = Position {file: 1, rank: 4};
-        board
-            .set(black_knight_position, black_knight)
-            .unwrap();
-        board
-            .set(white_rook_position, white_rook)
-            .unwrap();
+        let white_rook_position = Position { file: 1, rank: 4 };
+        board.set(black_knight_position, black_knight).unwrap();
+        board.set(white_rook_position, white_rook).unwrap();
 
         assert!(board.is_move_valid(white_rook_position, Position { file: 1, rank: 1 }));
-        assert!(board.is_move_valid(black_knight_position, Position { file: 1, rank: 2}));
+        assert!(board.is_move_valid(black_knight_position, Position { file: 1, rank: 2 }));
 
-        assert!(!board.is_move_valid(white_rook_position, Position { file: 7, rank: 4}));
-        assert!(!board.is_move_valid(white_rook_position, Position { file: 1, rank: 8}));
-        assert!(!board.is_move_valid(white_rook_position, Position { file: 7, rank: 7}));
-        assert!(!board.is_move_valid(black_knight_position, Position { file: 4, rank: 4}));
+        assert!(!board.is_move_valid(white_rook_position, Position { file: 7, rank: 4 }));
+        assert!(!board.is_move_valid(white_rook_position, Position { file: 1, rank: 8 }));
+        assert!(!board.is_move_valid(white_rook_position, Position { file: 7, rank: 7 }));
+        assert!(!board.is_move_valid(black_knight_position, Position { file: 4, rank: 4 }));
     }
 
     #[test]
@@ -208,18 +204,14 @@ mod tests {
             piece_type: PieceType::Knight,
             color: PieceColor::Black,
         };
-        let black_knight_position = Position {file: 2, rank: 4};
+        let black_knight_position = Position { file: 2, rank: 4 };
         let white_rook = Piece {
             piece_type: PieceType::Rook,
             color: PieceColor::White,
         };
-        let white_rook_position = Position {file: 1, rank: 4};
-        board
-            .set(black_knight_position, black_knight)
-            .unwrap();
-        board
-            .set(white_rook_position, white_rook)
-            .unwrap();
+        let white_rook_position = Position { file: 1, rank: 4 };
+        board.set(black_knight_position, black_knight).unwrap();
+        board.set(white_rook_position, white_rook).unwrap();
 
         assert_eq!(board.get_valid_moves(black_knight_position).len(), 8);
         assert_eq!(board.get_valid_moves(white_rook_position).len(), 9);
