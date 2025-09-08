@@ -110,7 +110,7 @@ impl Board {
             .get_offsets()
             .into_iter()
             .map(|o| from + o)
-            .any(|p| p == to)   
+            .any(|p| p == to)
         {
             return false;
         }
@@ -126,7 +126,7 @@ impl Board {
                 let Ok(path) = self.get_path(from, to) else {
                     return false;
                 };
-                
+
                 path.into_iter().all(|p| self.get_piece_at_pos(p).is_none())
             }
         }
@@ -156,5 +156,72 @@ impl Board {
         self.pieces[to_index] = self.pieces[from_index].clone();
         self.pieces[from_index] = None;
         Ok(())
+    }
+
+    fn set(&mut self, pos: Position, piece: Piece) -> Result<(), String> {
+        let index = pos.try_to_index()?;
+        self.pieces[index] = Some(piece);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        board::{self, Board, Position},
+        piece::{Piece, PieceColor, PieceType},
+    };
+
+    #[test]
+    fn test_is_valid_move() {
+        let mut board = Board::new();
+        let black_knight = Piece {
+            piece_type: PieceType::Knight,
+            color: PieceColor::Black,
+        };
+        let black_knight_position = Position {file: 2, rank: 4};
+        let white_rook = Piece {
+            piece_type: PieceType::Rook,
+            color: PieceColor::White,
+        };
+        let white_rook_position = Position {file: 1, rank: 4};
+        board
+            .set(black_knight_position, black_knight)
+            .unwrap();
+        board
+            .set(white_rook_position, white_rook)
+            .unwrap();
+
+        assert!(board.is_move_valid(white_rook_position, Position { file: 1, rank: 1 }));
+        assert!(board.is_move_valid(black_knight_position, Position { file: 1, rank: 2}));
+
+        assert!(!board.is_move_valid(white_rook_position, Position { file: 7, rank: 4}));
+        assert!(!board.is_move_valid(white_rook_position, Position { file: 1, rank: 8}));
+        assert!(!board.is_move_valid(white_rook_position, Position { file: 7, rank: 7}));
+        assert!(!board.is_move_valid(black_knight_position, Position { file: 4, rank: 4}));
+    }
+
+    #[test]
+    fn test_get_valid_moves() {
+        let mut board = Board::new();
+        let black_knight = Piece {
+            piece_type: PieceType::Knight,
+            color: PieceColor::Black,
+        };
+        let black_knight_position = Position {file: 2, rank: 4};
+        let white_rook = Piece {
+            piece_type: PieceType::Rook,
+            color: PieceColor::White,
+        };
+        let white_rook_position = Position {file: 1, rank: 4};
+        board
+            .set(black_knight_position, black_knight)
+            .unwrap();
+        board
+            .set(white_rook_position, white_rook)
+            .unwrap();
+
+        assert_eq!(board.get_valid_moves(black_knight_position).len(), 8);
+        assert_eq!(board.get_valid_moves(white_rook_position).len(), 9);
     }
 }
