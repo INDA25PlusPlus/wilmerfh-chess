@@ -65,6 +65,38 @@ impl Board {
         }
     }
 
+    fn get_path(&self, from: Position, to: Position) -> Result<Vec<Position>, String> {
+        if from == to {
+            return Err("From positon can't be the same as to position".to_string());
+        }
+        let is_on_same_file = from.file == to.file;
+        let is_on_same_rank = from.rank == to.rank;
+        let is_on_same_diagonal = {
+            let file_diff = (from.file - to.file).abs();
+            let rank_diff = (from.rank - to.rank).abs();
+            file_diff == rank_diff
+        };
+
+        if !(is_on_same_file || is_on_same_rank || is_on_same_diagonal) {
+            return Err("Positions are not on the same file, rank or diagonal".to_string());
+        }
+
+        let step_offset = Offset {
+            file: (to.file - from.file).signum(),
+            rank: (to.rank - from.rank).signum(),
+        };
+
+        let mut positions = Vec::new();
+        let mut current = from + step_offset;
+
+        while current != to {
+            positions.push(current);
+            current = current + step_offset;
+        }
+
+        Ok(positions)
+    }
+
     pub fn is_move_valid(&self, from: Position, to: Position) -> bool {
         if !(from.is_on_board() && to.is_on_board()) {
             return false;
