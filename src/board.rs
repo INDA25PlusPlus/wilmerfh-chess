@@ -4,7 +4,7 @@ use std::ops::Add;
 pub const BOARD_WIDTH: i8 = 8;
 pub const BOARD_HEIGHT: i8 = 8;
 
-#[derive(Clone)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct Position {
     file: i8,
     rank: i8,
@@ -55,7 +55,7 @@ impl Board {
         }
     }
 
-    fn get_piece_at_pos(&self, pos: &Position) -> Option<&Piece> {
+    fn get_piece_at_pos(&self, pos: Position) -> Option<&Piece> {
         let Ok(index) = pos.try_to_index() else {
             return None;
         };
@@ -65,7 +65,7 @@ impl Board {
         }
     }
 
-    pub fn is_move_valid(&self, from: &Position, to: &Position) -> bool {
+    pub fn is_move_valid(&self, from: Position, to: Position) -> bool {
         if !(from.is_on_board() && to.is_on_board()) {
             return false;
         };
@@ -73,7 +73,7 @@ impl Board {
         todo!()
     }
 
-    pub fn get_valid_moves(&self, pos: &Position) -> Vec<Position> {
+    pub fn get_valid_moves(&self, pos: Position) -> Vec<Position> {
         let Some(targeted_piece) = self.get_piece_at_pos(pos) else {
             return Vec::new();
         };
@@ -81,12 +81,12 @@ impl Board {
         let possible_offsets = targeted_piece.piece_type.get_offsets();
         possible_offsets
             .into_iter()
-            .map(|offset| (*pos).clone() + offset)
-            .filter(|target_pos| self.is_move_valid(pos, target_pos))
+            .map(|offset| pos + offset)
+            .filter(|target_pos| self.is_move_valid(pos, *target_pos))
             .collect()
     }
 
-    pub fn execute_move(&mut self, from: &Position, to: &Position) -> Result<(), String> {
+    pub fn execute_move(&mut self, from: Position, to: Position) -> Result<(), String> {
         if !self.is_move_valid(from, to) {
             return Err("Invalid move".to_string());
         };

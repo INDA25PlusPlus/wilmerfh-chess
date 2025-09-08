@@ -1,5 +1,4 @@
-#[derive(Clone)]
-
+#[derive(Copy, Clone)]
 pub struct Offset {
     pub file: i8,
     pub rank: i8,
