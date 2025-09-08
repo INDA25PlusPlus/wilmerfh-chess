@@ -1,4 +1,4 @@
-use crate::piece::{Offset, Piece};
+use crate::piece::{Offset, Piece, PieceType};
 use std::ops::Add;
 
 pub const BOARD_WIDTH: i8 = 8;
@@ -101,8 +101,35 @@ impl Board {
         if !(from.is_on_board() && to.is_on_board()) {
             return false;
         };
-
-        todo!()
+        let Some(piece) = self.get_piece_at_pos(from) else {
+            return false;
+        };
+        // Check if "to" is in the piece type's valid offsets
+        if !piece
+            .piece_type
+            .get_offsets()
+            .into_iter()
+            .map(|o| from + o)
+            .any(|p| p == to)   
+        {
+            return false;
+        }
+        // Check if target square has a piece of the same color
+        if let Some(target_piece) = self.get_piece_at_pos(to) {
+            if piece.color == target_piece.color {
+                return false;
+            }
+        }
+        match piece.piece_type {
+            PieceType::Knight => true,
+            _ => {
+                let Ok(path) = self.get_path(from, to) else {
+                    return false;
+                };
+                
+                path.into_iter().all(|p| self.get_piece_at_pos(p).is_none())
+            }
+        }
     }
 
     pub fn get_valid_moves(&self, pos: Position) -> Vec<Position> {
