@@ -21,22 +21,6 @@ pub struct DiagonalData {
 }
 
 #[derive(PartialEq, Clone, Copy)]
-pub enum StraightDirection {
-    North,
-    East,
-    South,
-    West,
-}
-
-#[derive(PartialEq, Clone, Copy)]
-pub enum DiagonalDirection {
-    NorthEast,
-    SouthEast,
-    SouthWest,
-    NorthWest,
-}
-
-#[derive(PartialEq, Clone, Copy)]
 pub enum MoveShape {
     Straight(StraightData),
     Diagonal(DiagonalData),
@@ -44,70 +28,6 @@ pub enum MoveShape {
 }
 
 impl MoveShape {
-    pub fn straight_forward(distance: i8) -> Self {
-        Self::Straight(StraightData {
-            forward_only: true,
-            backward_only: false,
-            distance,
-        })
-    }
-
-    pub fn straight_backward(distance: i8) -> Self {
-        Self::Straight(StraightData {
-            forward_only: false,
-            backward_only: true,
-            distance,
-        })
-    }
-
-    pub fn straight_any_direction(distance: i8) -> Self {
-        Self::Straight(StraightData {
-            forward_only: false,
-            backward_only: false,
-            distance,
-        })
-    }
-
-    pub fn straight_sliding() -> Self {
-        Self::Straight(StraightData {
-            forward_only: false,
-            backward_only: false,
-            distance: 0,
-        })
-    }
-
-    pub fn diagonal_forward(distance: i8) -> Self {
-        Self::Diagonal(DiagonalData {
-            forward_only: true,
-            backward_only: false,
-            distance,
-        })
-    }
-
-    pub fn diagonal_backward(distance: i8) -> Self {
-        Self::Diagonal(DiagonalData {
-            forward_only: false,
-            backward_only: true,
-            distance,
-        })
-    }
-
-    pub fn diagonal_any_direction(distance: i8) -> Self {
-        Self::Diagonal(DiagonalData {
-            forward_only: false,
-            backward_only: false,
-            distance,
-        })
-    }
-
-    pub fn diagonal_sliding() -> Self {
-        Self::Diagonal(DiagonalData {
-            forward_only: false,
-            backward_only: false,
-            distance: 0,
-        })
-    }
-
     pub fn from_positions(from: Position, to: Position) -> Result<Self, String> {
         if from == to {
             return Err("From positon can't be same as to position".to_string());
@@ -151,7 +71,6 @@ pub enum PieceType {
     King,
 }
 
-
 #[derive(Clone, PartialEq)]
 pub enum PieceColor {
     White,
@@ -174,17 +93,21 @@ impl Piece {
             (PieceType::Knight, MoveShape::Knight) => true,
             (PieceType::King, MoveShape::Straight(data)) => data.distance == 1,
             (PieceType::King, MoveShape::Diagonal(data)) => data.distance == 1,
-            (PieceType::Pawn, MoveShape::Straight(data)) => {
-                match self.color {
-                    PieceColor::White => data.forward_only && !data.backward_only && (data.distance == 1 || data.distance == 2),
-                    PieceColor::Black => !data.forward_only && data.backward_only && (data.distance == 1 || data.distance == 2),
+            (PieceType::Pawn, MoveShape::Straight(data)) => match self.color {
+                PieceColor::White => {
+                    data.forward_only
+                        && !data.backward_only
+                        && (data.distance == 1 || data.distance == 2)
+                }
+                PieceColor::Black => {
+                    !data.forward_only
+                        && data.backward_only
+                        && (data.distance == 1 || data.distance == 2)
                 }
             },
-            (PieceType::Pawn, MoveShape::Diagonal(data)) => {
-                match self.color {
-                    PieceColor::White => data.forward_only && !data.backward_only && data.distance == 1,
-                    PieceColor::Black => !data.forward_only && data.backward_only && data.distance == 1,
-                }
+            (PieceType::Pawn, MoveShape::Diagonal(data)) => match self.color {
+                PieceColor::White => data.forward_only && !data.backward_only && data.distance == 1,
+                PieceColor::Black => !data.forward_only && data.backward_only && data.distance == 1,
             },
             _ => false,
         }
@@ -194,7 +117,7 @@ impl Piece {
         let Some(shape) = move_.shape() else {
             return false;
         };
-        
+
         match shape {
             MoveShape::Straight(data) => {
                 if data.distance == 2 {
@@ -207,9 +130,7 @@ impl Piece {
                     data.distance == 1
                 }
             }
-            MoveShape::Diagonal(data) => {
-                data.distance == 1 && is_capture
-            }
+            MoveShape::Diagonal(data) => data.distance == 1 && is_capture,
             _ => false,
         }
     }
@@ -241,5 +162,4 @@ impl Move {
     pub fn is_on_board(&self) -> bool {
         self.from.is_on_board() && self.to.is_on_board()
     }
-    
 }
