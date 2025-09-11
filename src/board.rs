@@ -123,29 +123,8 @@ impl Board {
 
         // Special pawn movement rules
         if let PieceType::Pawn = moving_piece.type_ {
-            match shape {
-                MoveShape::Straight(data) => {
-                    if data.distance == 2 {
-                        match moving_piece.color {
-                            PieceColor::White => {
-                                if move_.from().rank != 1 {
-                                    return false;
-                                }
-                            }
-                            PieceColor::Black => {
-                                if move_.from().rank != 6 {
-                                    return false;
-                                }
-                            }
-                        }
-                    }
-                }
-                MoveShape::Diagonal(data) => {
-                    if data.distance != 1 || !self.is_move_capture(move_) {
-                        return false;
-                    }
-                }
-                _ => return false,
+            if !moving_piece.validate_pawn_rules(move_, self.is_move_capture(move_)) {
+                return false;
             }
         }
 

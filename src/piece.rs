@@ -189,6 +189,30 @@ impl Piece {
             _ => false,
         }
     }
+
+    pub fn validate_pawn_rules(&self, move_: Move, is_capture: bool) -> bool {
+        let Some(shape) = move_.shape() else {
+            return false;
+        };
+        
+        match shape {
+            MoveShape::Straight(data) => {
+                if data.distance == 2 {
+                    let starting_rank = match self.color {
+                        PieceColor::White => 1,
+                        PieceColor::Black => 6,
+                    };
+                    move_.from().rank == starting_rank
+                } else {
+                    data.distance == 1
+                }
+            }
+            MoveShape::Diagonal(data) => {
+                data.distance == 1 && is_capture
+            }
+            _ => false,
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
