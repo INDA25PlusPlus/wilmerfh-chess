@@ -1,4 +1,4 @@
-use crate::piece::{Offset, Piece, PieceType};
+use crate::piece::{Move, MoveShape, Offset, Piece, PieceColor, PieceType};
 use std::ops::Add;
 
 pub const BOARD_WIDTH: i8 = 8;
@@ -6,23 +6,27 @@ pub const BOARD_HEIGHT: i8 = 8;
 
 #[derive(Copy, Clone, PartialEq)]
 pub struct Position {
-    file: i8,
-    rank: i8,
+    pub file: i8,
+    pub rank: i8,
 }
 
 impl Position {
-    fn is_on_board(&self) -> bool {
+    pub fn new(file: i8, rank: i8) -> Self {
+        Self { file, rank }
+    }
+
+    pub fn is_on_board(&self) -> bool {
         if !((self.file >= 0) && (self.rank >= 0)) {
             return false;
         }
         (self.file < BOARD_WIDTH) && (self.rank < BOARD_HEIGHT)
     }
 
-    fn try_to_index(&self) -> Result<usize, String> {
+    fn to_index(&self) -> Result<usize, String> {
         if !self.is_on_board() {
             return Err("Position is not on board".to_string());
         }
-        let index = ((self.rank - 1) * BOARD_WIDTH + self.file - 1) as usize;
+        let index = (self.rank * BOARD_WIDTH + self.file) as usize;
         Ok(index)
     }
 }
@@ -30,10 +34,7 @@ impl Position {
 impl Add<Offset> for Position {
     type Output = Position;
     fn add(self, other: Offset) -> Self::Output {
-        Position {
-            file: self.file + other.file,
-            rank: self.rank + other.rank,
-        }
+        Position::new(self.file + other.file, self.rank + other.rank)
     }
 }
 
@@ -55,8 +56,8 @@ impl Board {
         }
     }
 
-    fn get_piece_at_pos(&self, pos: Position) -> Option<&Piece> {
-        let Ok(index) = pos.try_to_index() else {
+    fn piece_at_pos(&self, pos: Position) -> Option<&Piece> {
+        let Ok(index) = pos.to_index() else {
             return None;
         };
         match self.pieces.get(index) {
@@ -65,93 +66,103 @@ impl Board {
         }
     }
 
-    fn get_path(&self, from: Position, to: Position) -> Result<Vec<Position>, String> {
-        if from == to {
-            return Err("From positon can't be the same as to position".to_string());
-        }
-        let is_on_same_file = from.file == to.file;
-        let is_on_same_rank = from.rank == to.rank;
-        let is_on_same_diagonal = {
-            let file_diff = (from.file - to.file).abs();
-            let rank_diff = (from.rank - to.rank).abs();
-            file_diff == rank_diff
-        };
-
-        if !(is_on_same_file || is_on_same_rank || is_on_same_diagonal) {
-            return Err("Positions are not on the same file, rank or diagonal".to_string());
-        }
-
-        let step_offset = Offset {
-            file: (to.file - from.file).signum(),
-            rank: (to.rank - from.rank).signum(),
-        };
-
-        let mut positions = Vec::new();
-        let mut current = from + step_offset;
-
-        while current != to {
-            positions.push(current);
-            current = current + step_offset;
-        }
-
-        Ok(positions)
-    }
-
-    pub fn is_move_valid(&self, from: Position, to: Position) -> bool {
-        if !(from.is_on_board() && to.is_on_board()) {
+    fn path_clear(&self, move_: Move) -> bool {
+        let Some(moving_piece) = self.piece_at_pos(move_.from()) else {
             return false;
         };
-        let Some(piece) = self.get_piece_at_pos(from) else {
+        let Some(shape) = move_.shape() else {
             return false;
         };
-        // Check if "to" is in the piece type's valid offsets
-        if !piece
-            .piece_type
-            .get_offsets()
-            .into_iter()
-            .map(|o| from + o)
-            .any(|p| p == to)
-        {
-            return false;
-        }
-        // Check if target square has a piece of the same color
-        if let Some(target_piece) = self.get_piece_at_pos(to) {
-            if piece.color == target_piece.color {
-                return false;
-            }
-        }
-        match piece.piece_type {
-            PieceType::Knight => true,
+        match shape {
+            MoveShape::Knight => {}
             _ => {
-                let Ok(path) = self.get_path(from, to) else {
-                    return false;
+                let step = Offset {
+                    file: (move_.to().file - move_.from().file).signum(),
+                    rank: (move_.to().rank - move_.from().rank).signum(),
                 };
-
-                path.into_iter().all(|p| self.get_piece_at_pos(p).is_none())
+                let mut current = move_.from() + step;
+                while current != move_.to() {
+                    if self.piece_at_pos(current).is_some() {
+                        return false;
+                    }
+                    current = current + step;
+                }
             }
+        }
+        // Check destination is valid (not capturing own piece)
+        if let Some(target_piece) = self.piece_at_pos(move_.to()) {
+            target_piece.color != moving_piece.color
+        } else {
+            true
         }
     }
 
-    pub fn get_valid_moves(&self, pos: Position) -> Vec<Position> {
-        let Some(targeted_piece) = self.get_piece_at_pos(pos) else {
-            return Vec::new();
+    fn is_move_capture(&self, move_: Move) -> bool {
+        let Some(moving_piece) = self.piece_at_pos(move_.from()) else {
+            return false;
         };
-
-        let possible_offsets = targeted_piece.piece_type.get_offsets();
-        possible_offsets
-            .into_iter()
-            .map(|offset| pos + offset)
-            .filter(|target_pos| self.is_move_valid(pos, *target_pos))
-            .collect()
+        let Some(target_piece) = self.piece_at_pos(move_.to()) else {
+            return false;
+        };
+        moving_piece.color != target_piece.color
     }
 
-    pub fn execute_move(&mut self, from: Position, to: Position) -> Result<(), String> {
-        if !self.is_move_valid(from, to) {
+    pub fn pseudo_legal(&self, move_: Move) -> bool {
+        if !move_.is_on_board() {
+            return false;
+        };
+        let Some(moving_piece) = self.piece_at_pos(move_.from()) else {
+            return false;
+        };
+        let Some(shape) = move_.shape() else {
+            return false;
+        };
+        if !moving_piece.shape_allowed(shape) {
+            return false;
+        }
+
+        // Special pawn movement rules
+        if let PieceType::Pawn = moving_piece.type_ {
+            match shape {
+                MoveShape::Straight(data) => {
+                    if data.distance == 2 {
+                        match moving_piece.color {
+                            PieceColor::White => {
+                                if move_.from().rank != 1 {
+                                    return false;
+                                }
+                            }
+                            PieceColor::Black => {
+                                if move_.from().rank != 6 {
+                                    return false;
+                                }
+                            }
+                        }
+                    }
+                }
+                MoveShape::Diagonal(data) => {
+                    if data.distance != 1 || !self.is_move_capture(move_) {
+                        return false;
+                    }
+                }
+                _ => return false,
+            }
+        }
+
+        self.path_clear(move_)
+    }
+
+    pub fn legal_moves(&self, pos: Position) -> Vec<Position> {
+        todo!()
+    }
+
+    pub fn execute_move(&mut self, move_: Move) -> Result<(), String> {
+        if !self.pseudo_legal(move_) {
             return Err("Invalid move".to_string());
         };
 
-        let from_index = from.try_to_index()?;
-        let to_index = to.try_to_index()?;
+        let from_index = move_.from().to_index()?;
+        let to_index = move_.to().to_index()?;
 
         self.pieces[to_index] = self.pieces[from_index].clone();
         self.pieces[from_index] = None;
@@ -159,7 +170,7 @@ impl Board {
     }
 
     fn set(&mut self, pos: Position, piece: Piece) -> Result<(), String> {
-        let index = pos.try_to_index()?;
+        let index = pos.to_index()?;
         self.pieces[index] = Some(piece);
         Ok(())
     }
@@ -169,51 +180,31 @@ impl Board {
 mod tests {
     use crate::{
         board::{Board, Position},
-        piece::{Piece, PieceColor, PieceType},
+        piece::{Move, Piece, PieceColor, PieceType},
     };
 
     #[test]
-    fn test_is_valid_move() {
+    fn test_is_pseudo_legal() {
         let mut board = Board::new();
         let black_knight = Piece {
-            piece_type: PieceType::Knight,
+            type_: PieceType::Knight,
             color: PieceColor::Black,
         };
-        let black_knight_position = Position { file: 2, rank: 4 };
+        let black_knight_position = Position::new(2, 4);
         let white_rook = Piece {
-            piece_type: PieceType::Rook,
+            type_: PieceType::Rook,
             color: PieceColor::White,
         };
-        let white_rook_position = Position { file: 1, rank: 4 };
+        let white_rook_position = Position::new(1, 4);
         board.set(black_knight_position, black_knight).unwrap();
         board.set(white_rook_position, white_rook).unwrap();
 
-        assert!(board.is_move_valid(white_rook_position, Position { file: 1, rank: 1 }));
-        assert!(board.is_move_valid(black_knight_position, Position { file: 1, rank: 2 }));
+        assert!(board.pseudo_legal(Move::new(white_rook_position, Position::new(1, 0))));
+        assert!(board.pseudo_legal(Move::new(black_knight_position, Position::new(1, 2))));
 
-        assert!(!board.is_move_valid(white_rook_position, Position { file: 7, rank: 4 }));
-        assert!(!board.is_move_valid(white_rook_position, Position { file: 1, rank: 8 }));
-        assert!(!board.is_move_valid(white_rook_position, Position { file: 7, rank: 7 }));
-        assert!(!board.is_move_valid(black_knight_position, Position { file: 4, rank: 4 }));
-    }
-
-    #[test]
-    fn test_get_valid_moves() {
-        let mut board = Board::new();
-        let black_knight = Piece {
-            piece_type: PieceType::Knight,
-            color: PieceColor::Black,
-        };
-        let black_knight_position = Position { file: 2, rank: 4 };
-        let white_rook = Piece {
-            piece_type: PieceType::Rook,
-            color: PieceColor::White,
-        };
-        let white_rook_position = Position { file: 1, rank: 4 };
-        board.set(black_knight_position, black_knight).unwrap();
-        board.set(white_rook_position, white_rook).unwrap();
-
-        assert_eq!(board.get_valid_moves(black_knight_position).len(), 8);
-        assert_eq!(board.get_valid_moves(white_rook_position).len(), 9);
+        assert!(!board.pseudo_legal(Move::new(white_rook_position, Position::new(7, 4))));
+        assert!(!board.pseudo_legal(Move::new(white_rook_position, Position::new(1, 8))));
+        assert!(!board.pseudo_legal(Move::new(white_rook_position, Position::new(7, 7))));
+        assert!(!board.pseudo_legal(Move::new(black_knight_position, Position::new(4, 4))));
     }
 }
