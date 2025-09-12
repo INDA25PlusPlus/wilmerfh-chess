@@ -7,14 +7,7 @@ pub struct Offset {
 }
 
 #[derive(PartialEq, Clone, Copy)]
-pub struct StraightData {
-    pub forward_only: bool,
-    pub backward_only: bool,
-    pub distance: i8,
-}
-
-#[derive(PartialEq, Clone, Copy)]
-pub struct DiagonalData {
+pub struct ShapeData {
     pub forward_only: bool,
     pub backward_only: bool,
     pub distance: i8,
@@ -22,8 +15,8 @@ pub struct DiagonalData {
 
 #[derive(PartialEq, Clone, Copy)]
 pub enum MoveShape {
-    Straight(StraightData),
-    Diagonal(DiagonalData),
+    Straight(ShapeData),
+    Diagonal(ShapeData),
     Knight,
 }
 
@@ -43,7 +36,7 @@ impl MoveShape {
         let moving_backward = to.rank < from.rank;
         if delta_file * delta_rank == 0 {
             // Straight move
-            return Ok(MoveShape::Straight(StraightData {
+            return Ok(MoveShape::Straight(ShapeData {
                 forward_only: moving_forward,
                 backward_only: moving_backward,
                 distance,
@@ -51,7 +44,7 @@ impl MoveShape {
         }
         if delta_file == delta_rank {
             // Diagonal move
-            return Ok(MoveShape::Diagonal(DiagonalData {
+            return Ok(MoveShape::Diagonal(ShapeData {
                 forward_only: moving_forward,
                 backward_only: moving_backward,
                 distance,
