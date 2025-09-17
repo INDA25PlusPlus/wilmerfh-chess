@@ -6,6 +6,12 @@ pub struct Offset {
     pub rank: i8,
 }
 
+impl Offset {
+    pub fn new(file: i8, rank: i8) -> Self {
+        Self { file, rank }
+    }
+}
+
 #[derive(PartialEq, Clone, Copy)]
 pub struct ShapeData {
     pub forward_only: bool,
@@ -64,7 +70,7 @@ pub enum PieceType {
     King,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum PieceColor {
     White,
     Black,

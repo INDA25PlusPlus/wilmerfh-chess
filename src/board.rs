@@ -29,6 +29,12 @@ impl Position {
         let index = (self.rank * BOARD_WIDTH + self.file) as usize;
         Ok(index)
     }
+
+    fn from_index(index: usize) -> Self {
+        let rank = (index as i8) / BOARD_WIDTH;
+        let file = (index as i8) % BOARD_WIDTH;
+        Position::new(file, rank)
+    }
 }
 
 impl Add<Offset> for Position {
@@ -66,6 +72,86 @@ impl Board {
         }
     }
 
+    fn cast_ray(&self, start_pos: Position, direction: Offset) -> Option<(Position, &Piece)> {
+        let mut current = start_pos + direction;
+        while current.is_on_board() {
+            if let Some(piece) = self.piece_at_pos(current) {
+                return Some((current, piece));
+            }
+            current = current + direction;
+        }
+        None
+    }
+
+    fn is_pos_attacked(&self, square_pos: Position, attacking_color: PieceColor) -> bool {
+        let knight_offsets = [
+            Offset::new(2, 1),
+            Offset::new(2, -1),
+            Offset::new(-2, 1),
+            Offset::new(-2, -1),
+            Offset::new(1, 2),
+            Offset::new(1, -2),
+            Offset::new(-1, 2),
+            Offset::new(-1, -2),
+        ];
+        let mut moves_and_pieces = Vec::<(Move, &Piece)>::new();
+        for offset in knight_offsets {
+            let knight_pos = square_pos + offset;
+            if let Some(piece) = self.piece_at_pos(knight_pos) {
+                moves_and_pieces.push((Move::new(knight_pos, square_pos), piece));
+            }
+        }
+        let ray_directions = [
+            // Straight directions (rooks, queens)
+            Offset::new(1, 0),  // right
+            Offset::new(-1, 0), // left
+            Offset::new(0, 1),  // up
+            Offset::new(0, -1), // down
+            // Diagonal directions (bishops, queens)
+            Offset::new(1, 1),   // up-right
+            Offset::new(1, -1),  // down-right
+            Offset::new(-1, 1),  // up-left
+            Offset::new(-1, -1), // down-left
+        ];
+        for direction in ray_directions {
+            if let Some((piece_pos, piece)) = self.cast_ray(square_pos, direction) {
+                moves_and_pieces.push((Move::new(piece_pos, square_pos), piece));
+            }
+        }
+        // Filter by attacking color and move validity
+        moves_and_pieces
+            .into_iter()
+            .filter(|(_, piece)| piece.color == attacking_color)
+            .any(|(move_, _)| self.move_pseudo_legal(move_))
+    }
+
+    fn find_king(&self, color: PieceColor) -> Option<Position> {
+        self.pieces
+            .iter()
+            .enumerate()
+            .filter_map(|(index, piece_option)| piece_option.as_ref().map(|piece| (index, piece)))
+            .find_map(|(index, piece)| {
+                if piece.color == color && matches!(piece.type_, PieceType::King) {
+                    Some(Position::from_index(index))
+                } else {
+                    None
+                }
+            })
+    }
+
+    pub fn is_in_check(&self, color: PieceColor) -> bool {
+        let Some(king_pos) = self.find_king(color) else {
+            return false;
+        };
+
+        let attacking_color = match color {
+            PieceColor::White => PieceColor::Black,
+            PieceColor::Black => PieceColor::White,
+        };
+
+        self.is_pos_attacked(king_pos, attacking_color)
+    }
+
     fn path_clear(&self, move_: Move) -> bool {
         let Some(moving_piece) = self.piece_at_pos(move_.from()) else {
             return false;
@@ -73,6 +159,7 @@ impl Board {
         let Some(shape) = move_.shape() else {
             return false;
         };
+        // Ugly code
         match shape {
             MoveShape::Knight => {}
             _ => {
@@ -107,7 +194,7 @@ impl Board {
         moving_piece.color != target_piece.color
     }
 
-    pub fn pseudo_legal(&self, move_: Move) -> bool {
+    pub fn move_pseudo_legal(&self, move_: Move) -> bool {
         if !move_.is_on_board() {
             return false;
         };
@@ -136,10 +223,11 @@ impl Board {
     }
 
     pub fn execute_move(&mut self, move_: Move) -> Result<(), String> {
-        if !self.pseudo_legal(move_) {
+        if !self.move_pseudo_legal(move_) {
             return Err("Invalid move".to_string());
         };
 
+        // Ugly code
         let from_index = move_.from().to_index()?;
         let to_index = move_.to().to_index()?;
 
@@ -178,12 +266,70 @@ mod tests {
         board.set(black_knight_position, black_knight).unwrap();
         board.set(white_rook_position, white_rook).unwrap();
 
-        assert!(board.pseudo_legal(Move::new(white_rook_position, Position::new(1, 0))));
-        assert!(board.pseudo_legal(Move::new(black_knight_position, Position::new(1, 2))));
+        assert!(board.move_pseudo_legal(Move::new(white_rook_position, Position::new(1, 0))));
+        assert!(board.move_pseudo_legal(Move::new(black_knight_position, Position::new(1, 2))));
 
-        assert!(!board.pseudo_legal(Move::new(white_rook_position, Position::new(7, 4))));
-        assert!(!board.pseudo_legal(Move::new(white_rook_position, Position::new(1, 8))));
-        assert!(!board.pseudo_legal(Move::new(white_rook_position, Position::new(7, 7))));
-        assert!(!board.pseudo_legal(Move::new(black_knight_position, Position::new(4, 4))));
+        assert!(!board.move_pseudo_legal(Move::new(white_rook_position, Position::new(7, 4))));
+        assert!(!board.move_pseudo_legal(Move::new(white_rook_position, Position::new(1, 8))));
+        assert!(!board.move_pseudo_legal(Move::new(white_rook_position, Position::new(7, 7))));
+        assert!(!board.move_pseudo_legal(Move::new(black_knight_position, Position::new(4, 4))));
+    }
+
+    #[test]
+    fn test_is_in_check() {
+        let mut board = Board::new();
+
+        // Set up white king and black rook attacking it
+        let white_king = Piece {
+            type_: PieceType::King,
+            color: PieceColor::White,
+        };
+        let white_king_position = Position::new(4, 0);
+
+        let black_rook = Piece {
+            type_: PieceType::Rook,
+            color: PieceColor::Black,
+        };
+        let black_rook_position = Position::new(4, 7);
+
+        board.set(white_king_position, white_king).unwrap();
+        board.set(black_rook_position, black_rook).unwrap();
+
+        // White king should be in check from black rook
+        assert!(board.is_in_check(PieceColor::White));
+
+        // Black should not be in check (no black king on board)
+        assert!(!board.is_in_check(PieceColor::Black));
+
+        // Add black king in safe position
+        let black_king = Piece {
+            type_: PieceType::King,
+            color: PieceColor::Black,
+        };
+        let black_king_position = Position::new(0, 0);
+        board.set(black_king_position, black_king).unwrap();
+
+        // Now black king should not be in check
+        assert!(!board.is_in_check(PieceColor::Black));
+
+        // Test knight check
+        let mut board2 = Board::new();
+        let black_king2 = Piece {
+            type_: PieceType::King,
+            color: PieceColor::Black,
+        };
+        let black_king_position2 = Position::new(3, 3);
+
+        let white_knight = Piece {
+            type_: PieceType::Knight,
+            color: PieceColor::White,
+        };
+        let white_knight_position = Position::new(1, 2); // Knight move away from king
+
+        board2.set(black_king_position2, black_king2).unwrap();
+        board2.set(white_knight_position, white_knight).unwrap();
+
+        // Black king should be in check from white knight
+        assert!(board2.is_in_check(PieceColor::Black));
     }
 }
