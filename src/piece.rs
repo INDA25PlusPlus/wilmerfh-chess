@@ -94,14 +94,10 @@ impl Piece {
             (PieceType::King, MoveShape::Diagonal(data)) => data.distance == 1,
             (PieceType::Pawn, MoveShape::Straight(data)) => match self.color {
                 PieceColor::White => {
-                    data.forward_only
-                        && !data.backward_only
-                        && (data.distance == 1 || data.distance == 2)
+                    data.forward_only && (data.distance == 1 || data.distance == 2)
                 }
                 PieceColor::Black => {
-                    !data.forward_only
-                        && data.backward_only
-                        && (data.distance == 1 || data.distance == 2)
+                    data.backward_only && (data.distance == 1 || data.distance == 2)
                 }
             },
             (PieceType::Pawn, MoveShape::Diagonal(data)) => match self.color {
