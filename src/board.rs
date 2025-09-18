@@ -44,11 +44,13 @@ impl Add<Offset> for Position {
     }
 }
 
+#[derive(Clone, Copy)]
 enum MoveTurn {
     White,
     Black,
 }
 
+#[derive(Clone)]
 pub struct Board {
     pieces: [Option<Piece>; (BOARD_WIDTH * BOARD_HEIGHT) as usize],
     move_turn: MoveTurn,
@@ -62,17 +64,14 @@ impl Board {
         }
     }
 
-    fn piece_at_pos(&self, pos: Position) -> Option<&Piece> {
+    fn piece_at_pos(&self, pos: Position) -> Option<Piece> {
         let Ok(index) = pos.to_index() else {
             return None;
         };
-        match self.pieces.get(index) {
-            Some(piece) => piece.as_ref(),
-            None => None,
-        }
+        self.pieces[index]
     }
 
-    fn cast_ray(&self, start_pos: Position, direction: Offset) -> Option<(Position, &Piece)> {
+    fn cast_ray(&self, start_pos: Position, direction: Offset) -> Option<(Position, Piece)> {
         let mut current = start_pos + direction;
         while current.is_on_board() {
             if let Some(piece) = self.piece_at_pos(current) {
@@ -94,7 +93,7 @@ impl Board {
             Offset::new(-1, 2),
             Offset::new(-1, -2),
         ];
-        let mut moves_and_pieces = Vec::<(Move, &Piece)>::new();
+        let mut moves_and_pieces = Vec::<(Move, Piece)>::new();
         for offset in knight_offsets {
             let knight_pos = square_pos + offset;
             if let Some(piece) = self.piece_at_pos(knight_pos) {
@@ -218,27 +217,36 @@ impl Board {
         self.path_clear(move_)
     }
 
+    pub fn move_legal(&self, move_: Move) -> bool {
+        if !self.move_pseudo_legal(move_) {
+            return false;
+        }
+        let mut test_board = self.clone();
+        if let Err(_) = test_board.execute_move(move_) {
+            return false;
+        }
+
+        let moving_color = match self.move_turn {
+            MoveTurn::White => PieceColor::White,
+            MoveTurn::Black => PieceColor::Black,
+        };
+        !test_board.is_in_check(moving_color)
+    }
+
     pub fn legal_moves(&self, pos: Position) -> Vec<Position> {
         todo!()
     }
 
     pub fn execute_move(&mut self, move_: Move) -> Result<(), String> {
-        if !self.move_pseudo_legal(move_) {
-            return Err("Invalid move".to_string());
-        };
-
-        // Ugly code
-        let from_index = move_.from().to_index()?;
-        let to_index = move_.to().to_index()?;
-
-        self.pieces[to_index] = self.pieces[from_index].clone();
-        self.pieces[from_index] = None;
+        let moving_piece = self.piece_at_pos(move_.from());
+        self.set(move_.to(), moving_piece)?;
+        self.set(move_.from(), None)?;
         Ok(())
     }
 
-    fn set(&mut self, pos: Position, piece: Piece) -> Result<(), String> {
+    fn set(&mut self, pos: Position, piece: Option<Piece>) -> Result<(), String> {
         let index = pos.to_index()?;
-        self.pieces[index] = Some(piece);
+        self.pieces[index] = piece;
         Ok(())
     }
 }
@@ -253,15 +261,15 @@ mod tests {
     #[test]
     fn test_is_pseudo_legal() {
         let mut board = Board::new();
-        let black_knight = Piece {
+        let black_knight = Some(Piece {
             type_: PieceType::Knight,
             color: PieceColor::Black,
-        };
+        });
         let black_knight_position = Position::new(2, 4);
-        let white_rook = Piece {
+        let white_rook = Some(Piece {
             type_: PieceType::Rook,
             color: PieceColor::White,
-        };
+        });
         let white_rook_position = Position::new(1, 4);
         board.set(black_knight_position, black_knight).unwrap();
         board.set(white_rook_position, white_rook).unwrap();
@@ -280,16 +288,16 @@ mod tests {
         let mut board = Board::new();
 
         // Set up white king and black rook attacking it
-        let white_king = Piece {
+        let white_king = Some(Piece {
             type_: PieceType::King,
             color: PieceColor::White,
-        };
+        });
         let white_king_position = Position::new(4, 0);
 
-        let black_rook = Piece {
+        let black_rook = Some(Piece {
             type_: PieceType::Rook,
             color: PieceColor::Black,
-        };
+        });
         let black_rook_position = Position::new(4, 7);
 
         board.set(white_king_position, white_king).unwrap();
@@ -302,10 +310,10 @@ mod tests {
         assert!(!board.is_in_check(PieceColor::Black));
 
         // Add black king in safe position
-        let black_king = Piece {
+        let black_king = Some(Piece {
             type_: PieceType::King,
             color: PieceColor::Black,
-        };
+        });
         let black_king_position = Position::new(0, 0);
         board.set(black_king_position, black_king).unwrap();
 
@@ -314,16 +322,16 @@ mod tests {
 
         // Test knight check
         let mut board2 = Board::new();
-        let black_king2 = Piece {
+        let black_king2 = Some(Piece {
             type_: PieceType::King,
             color: PieceColor::Black,
-        };
+        });
         let black_king_position2 = Position::new(3, 3);
 
-        let white_knight = Piece {
+        let white_knight = Some(Piece {
             type_: PieceType::Knight,
             color: PieceColor::White,
-        };
+        });
         let white_knight_position = Position::new(1, 2); // Knight move away from king
 
         board2.set(black_king_position2, black_king2).unwrap();
@@ -331,5 +339,29 @@ mod tests {
 
         // Black king should be in check from white knight
         assert!(board2.is_in_check(PieceColor::Black));
+    }
+
+    #[test]
+    fn test_pinned_piece() {
+        let mut board = Board::new();
+
+        // White king on e1, white rook on e4, black rook on e8
+        let white_king = Some(Piece { type_: PieceType::King, color: PieceColor::White });
+        let white_rook = Some(Piece { type_: PieceType::Rook, color: PieceColor::White });
+        let black_rook = Some(Piece { type_: PieceType::Rook, color: PieceColor::Black });
+
+        board.set(Position::new(4, 0), white_king).unwrap(); // e1
+        board.set(Position::new(4, 3), white_rook).unwrap(); // e4
+        board.set(Position::new(4, 7), black_rook).unwrap(); // e8
+
+        // Rook cannot move horizontally (pinned)
+        let horizontal_move = Move::new(Position::new(4, 3), Position::new(7, 3));
+        assert!(board.move_pseudo_legal(horizontal_move));
+        assert!(!board.move_legal(horizontal_move));
+
+        // Rook can move along the pin
+        let vertical_move = Move::new(Position::new(4, 3), Position::new(4, 5));
+        assert!(board.move_pseudo_legal(vertical_move));
+        assert!(board.move_legal(vertical_move));
     }
 }

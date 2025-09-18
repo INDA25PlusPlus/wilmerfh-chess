@@ -60,7 +60,7 @@ impl MoveShape {
     }
 }
 
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 pub enum PieceType {
     Pawn,
     Bishop,
@@ -76,7 +76,7 @@ pub enum PieceColor {
     Black,
 }
 
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 pub struct Piece {
     pub type_: PieceType,
     pub color: PieceColor,
