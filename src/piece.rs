@@ -1,4 +1,5 @@
 use crate::board::Position;
+use std::ops::Mul;
 
 #[derive(Copy, Clone)]
 pub struct Offset {
@@ -9,6 +10,17 @@ pub struct Offset {
 impl Offset {
     pub fn new(file: i8, rank: i8) -> Self {
         Self { file, rank }
+    }
+}
+
+impl Mul<i8> for Offset {
+    type Output = Offset;
+
+    fn mul(self, scalar: i8) -> Self::Output {
+        Offset {
+            file: self.file * scalar,
+            rank: self.rank * scalar,
+        }
     }
 }
 
@@ -60,7 +72,7 @@ impl MoveShape {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum PieceType {
     Pawn,
     Bishop,
@@ -70,13 +82,13 @@ pub enum PieceType {
     King,
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum PieceColor {
     White,
     Black,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Piece {
     pub type_: PieceType,
     pub color: PieceColor,
@@ -90,7 +102,9 @@ impl Piece {
             (PieceType::Queen, MoveShape::Straight(_)) => true,
             (PieceType::Queen, MoveShape::Diagonal(_)) => true,
             (PieceType::Knight, MoveShape::Knight) => true,
-            (PieceType::King, MoveShape::Straight(data)) => data.distance == 1,
+            (PieceType::King, MoveShape::Straight(data)) => {
+                data.distance == 1 || data.distance == 2
+            }
             (PieceType::King, MoveShape::Diagonal(data)) => data.distance == 1,
             (PieceType::Pawn, MoveShape::Straight(data)) => match self.color {
                 PieceColor::White => {
