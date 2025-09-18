@@ -111,6 +111,7 @@ pub struct Board {
     pieces: [Option<Piece>; (BOARD_WIDTH * BOARD_HEIGHT) as usize],
     move_turn: MoveTurn,
     castling_rights: CastlingRights,
+    en_passant_target: Option<Position>,
 }
 
 impl Board {
@@ -119,6 +120,7 @@ impl Board {
             pieces: [const { None }; (BOARD_WIDTH * BOARD_HEIGHT) as usize],
             move_turn: MoveTurn::White,
             castling_rights: CastlingRights::new(),
+            en_passant_target: None,
         }
     }
 
@@ -242,6 +244,9 @@ impl Board {
     }
 
     fn is_move_capture(&self, move_: Move) -> bool {
+        if self.is_move_en_passant(move_) {
+            return true;
+        }
         let Some(moving_piece) = self.piece_at_pos(move_.from()) else {
             return false;
         };
@@ -249,6 +254,40 @@ impl Board {
             return false;
         };
         moving_piece.color != target_piece.color
+    }
+
+    fn is_move_en_passant(&self, move_: Move) -> bool {
+        let Some(en_passant_target) = self.en_passant_target else {
+            return false;
+        };
+        if move_.to() != en_passant_target {
+            return false;
+        }
+        let Some(moving_piece) = self.piece_at_pos(move_.from()) else {
+            return false;
+        };
+        if !matches!(moving_piece.type_, PieceType::Pawn) {
+            return false;
+        }
+        match (move_.shape(), moving_piece.color) {
+            (
+                Some(MoveShape::Diagonal(ShapeData {
+                    forward_only: true,
+                    distance: 1,
+                    ..
+                })),
+                PieceColor::White,
+            ) => true,
+            (
+                Some(MoveShape::Diagonal(ShapeData {
+                    backward_only: true,
+                    distance: 1,
+                    ..
+                })),
+                PieceColor::Black,
+            ) => true,
+            _ => false,
+        }
     }
 
     pub fn move_pseudo_legal(&self, move_: Move) -> bool {
@@ -410,9 +449,15 @@ impl Board {
             self.move_piece(rook_from, rook_to)?;
         }
 
+        if self.is_move_en_passant(move_) {
+            let captured_pawn_pos = Position::new(move_.to().file, move_.from().rank);
+            self.set(captured_pawn_pos, None)?;
+        }
+
         self.move_piece(move_.from(), move_.to())?;
 
         self.update_castling_rights_for_move(move_);
+        self.update_en_passant_target(move_);
         self.move_turn = match self.move_turn {
             MoveTurn::White => MoveTurn::Black,
             MoveTurn::Black => MoveTurn::White,
@@ -472,6 +517,29 @@ impl Board {
             }
             _ => {}
         }
+    }
+
+    fn update_en_passant_target(&mut self, move_: Move) {
+        if !matches!(
+            move_.shape(),
+            Some(MoveShape::Straight(ShapeData { distance: 2, .. }))
+        ) {
+            self.en_passant_target = None;
+            return;
+        }
+        if !matches!(
+            self.piece_at_pos(move_.to()),
+            Some(Piece {
+                type_: PieceType::Pawn,
+                ..
+            })
+        ) {
+            self.en_passant_target = None;
+            return;
+        }
+
+        let target_rank = (move_.from().rank + move_.to().rank) / 2;
+        self.en_passant_target = Some(Position::new(move_.to().file, target_rank));
     }
 
     fn set(&mut self, pos: Position, piece: Option<Piece>) -> Result<(), String> {
@@ -677,5 +745,51 @@ mod tests {
                 color: PieceColor::Black
             })
         ));
+    }
+
+    #[test]
+    fn test_en_passant() {
+        let mut board = Board::new();
+
+        board
+            .set(
+                Position::new(4, 4),
+                Some(Piece {
+                    type_: PieceType::Pawn,
+                    color: PieceColor::White,
+                }),
+            )
+            .unwrap();
+        board
+            .set(
+                Position::new(5, 6),
+                Some(Piece {
+                    type_: PieceType::Pawn,
+                    color: PieceColor::Black,
+                }),
+            )
+            .unwrap();
+
+        board
+            .make_move(Move::new(Position::new(5, 6), Position::new(5, 4)))
+            .unwrap();
+
+        let en_passant_move = Move::new(Position::new(4, 4), Position::new(5, 5));
+        assert!(board.is_move_en_passant(en_passant_move));
+
+        board
+            .set(
+                Position::new(0, 0),
+                Some(Piece {
+                    type_: PieceType::Rook,
+                    color: PieceColor::White,
+                }),
+            )
+            .unwrap();
+        board
+            .make_move(Move::new(Position::new(0, 0), Position::new(0, 1)))
+            .unwrap();
+
+        assert!(!board.is_move_en_passant(en_passant_move));
     }
 }
