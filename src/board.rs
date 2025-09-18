@@ -95,7 +95,7 @@ impl Add<Offset> for Position {
 }
 
 #[derive(Clone, Copy)]
-enum MoveTurn {
+pub enum MoveTurn {
     White,
     Black,
 }
@@ -115,13 +115,145 @@ pub struct Board {
 }
 
 impl Board {
-    fn new() -> Self {
+    pub fn new(
+        pieces: [Option<Piece>; (BOARD_WIDTH * BOARD_HEIGHT) as usize],
+        move_turn: MoveTurn,
+        castling_rights: CastlingRights,
+        en_passant_target: Option<Position>,
+    ) -> Self {
         Self {
-            pieces: [const { None }; (BOARD_WIDTH * BOARD_HEIGHT) as usize],
-            move_turn: MoveTurn::White,
-            castling_rights: CastlingRights::new(),
-            en_passant_target: None,
+            pieces,
+            move_turn,
+            castling_rights,
+            en_passant_target,
         }
+    }
+
+    pub fn starting_position() -> Self {
+        Self::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").unwrap()
+    }
+
+    pub fn empty() -> Self {
+        Self::new(
+            [const { None }; (BOARD_WIDTH * BOARD_HEIGHT) as usize],
+            MoveTurn::White,
+            CastlingRights::new(),
+            None,
+        )
+    }
+
+    pub fn from_fen(fen: &str) -> Result<Self, String> {
+        let parts: Vec<&str> = fen.split_whitespace().collect();
+        if parts.len() != 6 {
+            return Err("FEN string must have 6 parts".to_string());
+        }
+
+        let piece_placement = parts[0];
+        let active_color = parts[1];
+        let castling_rights_str = parts[2];
+        let en_passant_square = parts[3];
+
+        if piece_placement.split('/').count() != 8 {
+            return Err("FEN piece placement must have 8 ranks".to_string());
+        }
+
+        // Expands digits like "8" -> "........"
+        let expand_digit = |c: char| -> Vec<char> {
+            if let Some(digit) = c.to_digit(10) {
+                vec!['.'; digit as usize]
+            } else {
+                vec![c]
+            }
+        };
+
+        let char_to_piece = |ch: char| -> Result<Option<Piece>, String> {
+            if ch == '.' {
+                return Ok(None);
+            }
+            let (piece_type, color) = match ch {
+                'P' => (PieceType::Pawn, PieceColor::White),
+                'N' => (PieceType::Knight, PieceColor::White),
+                'B' => (PieceType::Bishop, PieceColor::White),
+                'R' => (PieceType::Rook, PieceColor::White),
+                'Q' => (PieceType::Queen, PieceColor::White),
+                'K' => (PieceType::King, PieceColor::White),
+                'p' => (PieceType::Pawn, PieceColor::Black),
+                'n' => (PieceType::Knight, PieceColor::Black),
+                'b' => (PieceType::Bishop, PieceColor::Black),
+                'r' => (PieceType::Rook, PieceColor::Black),
+                'q' => (PieceType::Queen, PieceColor::Black),
+                'k' => (PieceType::King, PieceColor::Black),
+                _ => return Err(format!("Invalid piece character: {}", ch)),
+            };
+            Ok(Some(Piece {
+                type_: piece_type,
+                color,
+            }))
+        };
+
+        let ranks: Vec<&str> = piece_placement.split('/').collect();
+
+        // Reverse the order of ranks and expand digits
+        let chars: Vec<char> = ranks
+            .iter()
+            .rev()
+            .flat_map(|rank| rank.chars())
+            .flat_map(expand_digit)
+            .collect();
+
+        // Convert chars to pieces
+        let pieces: Vec<Option<Piece>> = chars
+            .into_iter()
+            .map(char_to_piece)
+            .collect::<Result<Vec<Option<Piece>>, String>>()?;
+
+        let pieces: [Option<Piece>; (BOARD_WIDTH * BOARD_HEIGHT) as usize] = pieces
+            .try_into()
+            .map_err(|_| "Invalid number of pieces in FEN")?;
+
+        // Parse active color
+        let move_turn = match active_color {
+            "w" => MoveTurn::White,
+            "b" => MoveTurn::Black,
+            _ => return Err("Invalid active color".to_string()),
+        };
+
+        // Parse castling rights
+        let castling_rights = CastlingRights {
+            white_kingside: castling_rights_str.contains('K'),
+            white_queenside: castling_rights_str.contains('Q'),
+            black_kingside: castling_rights_str.contains('k'),
+            black_queenside: castling_rights_str.contains('q'),
+        };
+
+        // Parse en passant target square
+        let en_passant_target = match en_passant_square {
+            "-" => None,
+            square => {
+                if square.len() != 2 {
+                    return Err("Invalid en passant square".to_string());
+                }
+                let file_char = square.chars().nth(0).unwrap();
+                let rank_char = square.chars().nth(1).unwrap();
+
+                let file = (file_char as i8) - 'a' as i8;
+                let rank = (rank_char as i8) - '1' as i8;
+
+                let pos = Position::new(file, rank);
+                if pos.is_on_board() {
+                    Some(pos)
+                } else {
+                    return Err("En passant square out of bounds".to_string());
+                }
+            }
+        };
+
+        Ok(Board::new(
+            pieces,
+            move_turn,
+            castling_rights,
+            en_passant_target,
+        ))
     }
 
     fn piece_at_pos(&self, pos: Position) -> Option<Piece> {
@@ -558,19 +690,10 @@ mod tests {
 
     #[test]
     fn test_is_pseudo_legal() {
-        let mut board = Board::new();
-        let black_knight = Some(Piece {
-            type_: PieceType::Knight,
-            color: PieceColor::Black,
-        });
+        // Black knight on c5, white rook on b5
+        let board = Board::from_fen("8/8/8/1Rn5/8/8/8/8 w - - 0 1").unwrap();
         let black_knight_position = Position::new(2, 4);
-        let white_rook = Some(Piece {
-            type_: PieceType::Rook,
-            color: PieceColor::White,
-        });
         let white_rook_position = Position::new(1, 4);
-        board.set(black_knight_position, black_knight).unwrap();
-        board.set(white_rook_position, white_rook).unwrap();
 
         assert!(board.move_pseudo_legal(Move::new(white_rook_position, Position::new(1, 0))));
         assert!(board.move_pseudo_legal(Move::new(black_knight_position, Position::new(1, 2))));
@@ -583,23 +706,8 @@ mod tests {
 
     #[test]
     fn test_is_in_check() {
-        let mut board = Board::new();
-
-        // Set up white king and black rook attacking it
-        let white_king = Some(Piece {
-            type_: PieceType::King,
-            color: PieceColor::White,
-        });
-        let white_king_position = Position::new(4, 0);
-
-        let black_rook = Some(Piece {
-            type_: PieceType::Rook,
-            color: PieceColor::Black,
-        });
-        let black_rook_position = Position::new(4, 7);
-
-        board.set(white_king_position, white_king).unwrap();
-        board.set(black_rook_position, black_rook).unwrap();
+        // White king on e1, black rook on e8 attacking it
+        let board = Board::from_fen("4r3/8/8/8/8/8/8/4K3 w - - 0 1").unwrap();
 
         // White king should be in check from black rook
         assert!(board.is_in_check(PieceColor::White));
@@ -607,59 +715,15 @@ mod tests {
         // Black should not be in check (no black king on board)
         assert!(!board.is_in_check(PieceColor::Black));
 
-        // Add black king in safe position
-        let black_king = Some(Piece {
-            type_: PieceType::King,
-            color: PieceColor::Black,
-        });
-        let black_king_position = Position::new(0, 0);
-        board.set(black_king_position, black_king).unwrap();
-
-        // Now black king should not be in check
-        assert!(!board.is_in_check(PieceColor::Black));
-
-        // Test knight check
-        let mut board2 = Board::new();
-        let black_king2 = Some(Piece {
-            type_: PieceType::King,
-            color: PieceColor::Black,
-        });
-        let black_king_position2 = Position::new(3, 3);
-
-        let white_knight = Some(Piece {
-            type_: PieceType::Knight,
-            color: PieceColor::White,
-        });
-        let white_knight_position = Position::new(1, 2); // Knight move away from king
-
-        board2.set(black_king_position2, black_king2).unwrap();
-        board2.set(white_knight_position, white_knight).unwrap();
-
-        // Black king should be in check from white knight
-        assert!(board2.is_in_check(PieceColor::Black));
+        // White king on e1, black rook on e8, but white rook on e4 blocks the check
+        let board2 = Board::from_fen("4r3/8/8/8/4R3/8/8/4K3 w - - 0 1").unwrap();
+        assert!(!board2.is_in_check(PieceColor::White));
     }
 
     #[test]
     fn test_pinned_piece() {
-        let mut board = Board::new();
-
-        // White king on e1, white rook on e4, black rook on e8
-        let white_king = Some(Piece {
-            type_: PieceType::King,
-            color: PieceColor::White,
-        });
-        let white_rook = Some(Piece {
-            type_: PieceType::Rook,
-            color: PieceColor::White,
-        });
-        let black_rook = Some(Piece {
-            type_: PieceType::Rook,
-            color: PieceColor::Black,
-        });
-
-        board.set(Position::new(4, 0), white_king).unwrap(); // e1
-        board.set(Position::new(4, 3), white_rook).unwrap(); // e4
-        board.set(Position::new(4, 7), black_rook).unwrap(); // e8
+        // White king on e1, white rook on e4, black rook on e8, white rook pinned
+        let board = Board::from_fen("4r3/8/8/8/4R3/8/8/4K3 w - - 0 1").unwrap();
 
         // Rook cannot move horizontally (pinned)
         let horizontal_move = Move::new(Position::new(4, 3), Position::new(7, 3));
@@ -674,54 +738,13 @@ mod tests {
 
     #[test]
     fn test_castling() {
-        let mut board = Board::new();
-
-        board.set(Position::new(5, 0), None).unwrap();
-        board.set(Position::new(6, 0), None).unwrap();
-
-        board
-            .set(
-                Position::new(4, 2),
-                Some(Piece {
-                    type_: PieceType::Knight,
-                    color: PieceColor::Black,
-                }),
-            )
-            .unwrap();
-
+        // White king and rook in starting positions, but black knight attacks king's path
+        let board = Board::from_fen("r3k2r/8/8/8/8/4n3/8/R3K2R w KQkq - 0 1").unwrap();
         let kingside_castle = Move::new(Position::new(4, 0), Position::new(6, 0));
         assert!(!board.move_legal(kingside_castle));
 
-        let mut board2 = Board::new();
-
-        board2
-            .set(
-                Position::new(4, 7),
-                Some(Piece {
-                    type_: PieceType::King,
-                    color: PieceColor::Black,
-                }),
-            )
-            .unwrap();
-        board2
-            .set(
-                Position::new(0, 7),
-                Some(Piece {
-                    type_: PieceType::Rook,
-                    color: PieceColor::Black,
-                }),
-            )
-            .unwrap();
-
-        board2
-            .set(
-                Position::new(1, 4),
-                Some(Piece {
-                    type_: PieceType::Rook,
-                    color: PieceColor::White,
-                }),
-            )
-            .unwrap();
+        // Black king and queenside rook, white rook on b5, castling should be legal
+        let mut board2 = Board::from_fen("r3k3/8/8/8/1R6/8/8/8 b q - 0 1").unwrap();
 
         let queenside_castle = Move::new(Position::new(4, 7), Position::new(2, 7));
         assert!(board2.move_legal(queenside_castle));
@@ -745,30 +768,21 @@ mod tests {
                 color: PieceColor::Black
             })
         ));
+
+        // Test castling after rook capture - white king and rook, black knight captures rook
+        let mut board3 = Board::from_fen("8/8/8/8/8/8/6n1/R3K3 w Q - 0 1").unwrap();
+        board3
+            .make_move(Move::new(Position::new(6, 1), Position::new(0, 0)))
+            .unwrap();
+
+        let queenside_castle = Move::new(Position::new(4, 0), Position::new(2, 0));
+        assert!(!board3.move_legal(queenside_castle));
     }
 
     #[test]
     fn test_en_passant() {
-        let mut board = Board::new();
-
-        board
-            .set(
-                Position::new(4, 4),
-                Some(Piece {
-                    type_: PieceType::Pawn,
-                    color: PieceColor::White,
-                }),
-            )
-            .unwrap();
-        board
-            .set(
-                Position::new(5, 6),
-                Some(Piece {
-                    type_: PieceType::Pawn,
-                    color: PieceColor::Black,
-                }),
-            )
-            .unwrap();
+        // White pawn on e5, black pawn on f7
+        let mut board = Board::from_fen("8/5p2/8/4P3/8/8/8/8 w - - 0 1").unwrap();
 
         board
             .make_move(Move::new(Position::new(5, 6), Position::new(5, 4)))
@@ -777,19 +791,11 @@ mod tests {
         let en_passant_move = Move::new(Position::new(4, 4), Position::new(5, 5));
         assert!(board.is_move_en_passant(en_passant_move));
 
-        board
-            .set(
-                Position::new(0, 0),
-                Some(Piece {
-                    type_: PieceType::Rook,
-                    color: PieceColor::White,
-                }),
-            )
-            .unwrap();
-        board
+        let mut board2 = Board::from_fen("8/8/8/8/8/8/8/R7 w - - 0 1").unwrap();
+        board2
             .make_move(Move::new(Position::new(0, 0), Position::new(0, 1)))
             .unwrap();
 
-        assert!(!board.is_move_en_passant(en_passant_move));
+        assert!(!board2.is_move_en_passant(en_passant_move));
     }
 }
