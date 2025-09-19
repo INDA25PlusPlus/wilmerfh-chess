@@ -265,7 +265,7 @@ impl Board {
         ))
     }
 
-    fn piece_at_pos(&self, pos: Position) -> Option<Piece> {
+    pub fn piece_at_pos(&self, pos: Position) -> Option<Piece> {
         let Ok(index) = pos.to_index() else {
             return None;
         };
