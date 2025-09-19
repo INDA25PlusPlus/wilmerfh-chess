@@ -1,5 +1,14 @@
 # lachess
 
+A simple chess engine library.
+
+## Core Types
+
+- `Board` - represents the chess board state including piece positions, turn, castling rights, and en passant
+- `Position` - a square on the board using file (0-7) and rank (0-7) coordinates
+- `MoveResult` - the outcome of attempting a move (Normal, Promotion, or Illegal)
+- `PieceType` - the type of chess piece (Pawn, Rook, Knight, Bishop, Queen, King)
+
 ## Usage
 
 ### Creating a board
@@ -18,6 +27,11 @@ let mut board = Board::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w K
 ```
 
 ### Making moves
+
+Making moves returns a `MoveResult` to tell you what happened:
+- `Normal` - moves complete right away
+- `Promotion` - pawn promotions work in two steps: the move is detected first, then you choose what piece to promote to (or cancel if you change your mind)
+- `Illegal` - moves are rejected without changing anything
 
 ```rust
 
