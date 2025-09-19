@@ -171,4 +171,39 @@ impl Move {
     pub fn is_on_board(&self) -> bool {
         self.from.is_on_board() && self.to.is_on_board()
     }
+
+    pub fn path(&self) -> Result<Vec<Position>, String> {
+        if self.from == self.to {
+            return Ok(Vec::new());
+        }
+
+        let Some(shape) = self.shape() else {
+            return Err("Invalid move shape".to_string());
+        };
+
+        match shape {
+            MoveShape::Knight => {
+                // Knight moves directly to destination, only includes the destination
+                Ok(vec![self.to])
+            }
+            MoveShape::Straight(_) | MoveShape::Diagonal(_) => {
+                let delta_file = self.to.file - self.from.file;
+                let delta_rank = self.to.rank - self.from.rank;
+                let step = Offset::new(delta_file.signum(), delta_rank.signum());
+
+                let mut positions = Vec::new();
+                let mut current = self.from + step;
+
+                while current.is_on_board() {
+                    positions.push(current);
+                    if current == self.to {
+                        break;
+                    }
+                    current = current + step;
+                }
+
+                Ok(positions)
+            }
+        }
+    }
 }

@@ -263,15 +263,26 @@ impl Board {
         self.pieces[index]
     }
 
-    fn cast_ray(&self, start_pos: Position, direction: Offset) -> Option<(Position, Piece)> {
+    fn cast_ray(
+        &self,
+        start_pos: Position,
+        direction: Offset,
+    ) -> Result<(Position, Option<Piece>), String> {
         let mut current = start_pos + direction;
+        let mut last_valid = None;
+
         while current.is_on_board() {
+            last_valid = Some(current);
             if let Some(piece) = self.piece_at_pos(current) {
-                return Some((current, piece));
+                return Ok((current, Some(piece)));
             }
             current = current + direction;
         }
-        None
+
+        match last_valid {
+            Some(pos) => Ok((pos, None)),
+            None => Err("No valid positions in this direction".to_string()),
+        }
     }
 
     fn is_pos_attacked(&self, square_pos: Position, attacking_color: PieceColor) -> bool {
@@ -305,7 +316,7 @@ impl Board {
             Offset::new(-1, -1), // down-left
         ];
         for direction in ray_directions {
-            if let Some((piece_pos, piece)) = self.cast_ray(square_pos, direction) {
+            if let Ok((piece_pos, Some(piece))) = self.cast_ray(square_pos, direction) {
                 moves_and_pieces.push((Move::new(piece_pos, square_pos), piece));
             }
         }
@@ -506,12 +517,12 @@ impl Board {
             Offset::new(1, 0)
         };
 
-        if let Some((
+        if let Ok((
             _,
-            Piece {
+            Some(Piece {
                 type_: PieceType::King,
                 ..
-            },
+            }),
         )) = self.cast_ray(rook_pos, direction)
         {
             // Path is clear and king is reachable
@@ -558,7 +569,50 @@ impl Board {
     }
 
     pub fn legal_moves(&self, pos: Position) -> Vec<Position> {
-        todo!()
+        let Some(_piece) = self.piece_at_pos(pos) else {
+            return Vec::new();
+        };
+
+        let knight_offsets = [
+            Offset::new(2, 1),
+            Offset::new(2, -1),
+            Offset::new(-2, 1),
+            Offset::new(-2, -1),
+            Offset::new(1, 2),
+            Offset::new(1, -2),
+            Offset::new(-1, 2),
+            Offset::new(-1, -2),
+        ];
+
+        let ray_directions = [
+            Offset::new(1, 0),
+            Offset::new(-1, 0),
+            Offset::new(0, 1),
+            Offset::new(0, -1),
+            Offset::new(1, 1),
+            Offset::new(1, -1),
+            Offset::new(-1, 1),
+            Offset::new(-1, -1),
+        ];
+
+        let knight_moves = knight_offsets
+            .into_iter()
+            .map(|offset| pos + offset)
+            .map(|to_pos| Move::new(pos, to_pos));
+
+        let sliding_moves = ray_directions
+            .into_iter()
+            .filter_map(|dir| self.cast_ray(pos, dir).ok())
+            .map(|(hit_pos, _piece)| Move::new(pos, hit_pos))
+            .filter_map(|move_| move_.path().ok())
+            .flatten()
+            .map(|target_pos| Move::new(pos, target_pos));
+
+        knight_moves
+            .chain(sliding_moves)
+            .filter(|&move_| self.move_legal(move_))
+            .map(|move_| move_.to())
+            .collect()
     }
 
     fn move_piece(&mut self, from: Position, to: Position) -> Result<(), String> {
