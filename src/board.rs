@@ -358,24 +358,13 @@ impl Board {
         let Some(moving_piece) = self.piece_at_pos(move_.from()) else {
             return false;
         };
-        let Some(shape) = move_.shape() else {
+        let Some(_) = move_.shape() else {
             return false;
         };
-        // Ugly code
-        match shape {
-            MoveShape::Knight => {}
-            _ => {
-                let step = Offset {
-                    file: (move_.to().file - move_.from().file).signum(),
-                    rank: (move_.to().rank - move_.from().rank).signum(),
-                };
-                let mut current = move_.from() + step;
-                while current != move_.to() {
-                    if self.piece_at_pos(current).is_some() {
-                        return false;
-                    }
-                    current = current + step;
-                }
+        // Check if path is clear (excluding destination)
+        if let Ok(path) = move_.path_excluding_destination() {
+            if path.into_iter().any(|pos| self.piece_at_pos(pos).is_some()) {
+                return false;
             }
         }
         // Check destination is valid (not capturing own piece)
@@ -536,20 +525,18 @@ impl Board {
             PieceColor::Black => PieceColor::White,
         };
 
-        let king_direction = match castling_side {
-            CastlingSide::Kingside => Offset::new(1, 0),
-            CastlingSide::Queenside => Offset::new(-1, 0),
+        // Check that king doesn't travel through or end in check
+        if self.is_pos_attacked(move_.from(), attacking_color) {
+            return false;
+        }
+
+        let Ok(path) = move_.path() else {
+            return false;
         };
 
-        let positions_to_check = [
-            move_.from(),
-            move_.from() + king_direction * 1,
-            move_.from() + king_direction * 2,
-        ];
-
-        positions_to_check
+        !path
             .into_iter()
-            .all(|pos| !self.is_pos_attacked(pos, attacking_color))
+            .any(|pos| self.is_pos_attacked(pos, attacking_color))
     }
 
     pub fn move_legal(&self, move_: Move) -> bool {

@@ -206,4 +206,10 @@ impl Move {
             }
         }
     }
+
+    pub fn path_excluding_destination(&self) -> Result<Vec<Position>, String> {
+        let mut path = self.path()?;
+        path.pop();
+        Ok(path)
+    }
 }
