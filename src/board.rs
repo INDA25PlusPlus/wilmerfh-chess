@@ -429,6 +429,7 @@ impl Board {
         let Some(moving_piece) = self.piece_at_pos(move_.from()) else {
             return false;
         };
+
         let Some(shape) = move_.shape() else {
             return false;
         };
@@ -743,6 +744,22 @@ impl Board {
         self.pieces[index] = piece;
         Ok(())
     }
+
+    pub fn is_checkmate(&self) -> bool {
+        let current_color = match self.move_turn {
+            MoveTurn::White => PieceColor::White,
+            MoveTurn::Black => PieceColor::Black,
+        };
+        self.is_in_check(current_color) && self.all_legal_moves().is_empty()
+    }
+
+    pub fn is_stalemate(&self) -> bool {
+        let current_color = match self.move_turn {
+            MoveTurn::White => PieceColor::White,
+            MoveTurn::Black => PieceColor::Black,
+        };
+        !self.is_in_check(current_color) && self.all_legal_moves().is_empty()
+    }
 }
 
 #[cfg(test)]
@@ -861,5 +878,19 @@ mod tests {
             .unwrap();
 
         assert!(!board2.is_move_en_passant(en_passant_move));
+    }
+
+    #[test]
+    fn test_checkmate() {
+        // Black king on g8, white king on g6, white rook on a8
+        let board = Board::from_fen("R5k1/8/6K1/8/8/8/8/8 b - - 0 1").unwrap();
+        assert!(board.is_checkmate());
+    }
+
+    #[test]
+    fn test_stalemate() {
+        // Black king on b8, white king on b6, white pawn on b7
+        let board = Board::from_fen("1k6/1P6/1K6/8/8/8/8/8 b - - 0 1").unwrap();
+        assert!(board.is_stalemate());
     }
 }
