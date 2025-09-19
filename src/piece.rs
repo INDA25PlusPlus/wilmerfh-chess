@@ -127,8 +127,8 @@ impl Piece {
             return false;
         };
 
-        match shape {
-            MoveShape::Straight(data) => {
+        match (shape, is_capture) {
+            (MoveShape::Straight(data), false) => {
                 if data.distance == 2 {
                     let starting_rank = match self.color {
                         PieceColor::White => 1,
@@ -139,7 +139,7 @@ impl Piece {
                     data.distance == 1
                 }
             }
-            MoveShape::Diagonal(data) => data.distance == 1 && is_capture,
+            (MoveShape::Diagonal(data), true) => data.distance == 1,
             _ => false,
         }
     }
