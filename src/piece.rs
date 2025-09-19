@@ -72,7 +72,7 @@ impl MoveShape {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum PieceType {
     Pawn,
     Bishop,

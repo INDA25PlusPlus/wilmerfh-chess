@@ -1,6 +1,13 @@
 use crate::piece::{Move, MoveShape, Offset, Piece, PieceColor, PieceType, ShapeData};
 use std::ops::Add;
 
+#[derive(Debug, PartialEq)]
+pub enum MoveResult {
+    Normal,
+    Promotion,
+    Illegal,
+}
+
 pub const BOARD_WIDTH: i8 = 8;
 pub const BOARD_HEIGHT: i8 = 8;
 
@@ -112,6 +119,7 @@ pub struct Board {
     move_turn: MoveTurn,
     castling_rights: CastlingRights,
     en_passant_target: Option<Position>,
+    promotion_move: Option<Move>,
 }
 
 impl Board {
@@ -126,6 +134,7 @@ impl Board {
             move_turn,
             castling_rights,
             en_passant_target,
+            promotion_move: None,
         }
     }
 
@@ -648,12 +657,25 @@ impl Board {
         Ok(())
     }
 
-    pub fn make_move(&mut self, from: Position, to: Position) -> Result<(), String> {
+    pub fn make_move(&mut self, from: Position, to: Position) -> MoveResult {
+        if self.promotion_move.is_some() {
+            return MoveResult::Illegal;
+        }
+
         let move_ = Move::new(from, to);
         if !self.move_legal(move_) {
-            return Err("Illegal move".to_string());
+            return MoveResult::Illegal;
         }
-        self.execute_move(move_)
+
+        if self.is_promotion_move(move_) {
+            self.promotion_move = Some(move_);
+            return MoveResult::Promotion;
+        }
+
+        if let Err(_) = self.execute_move(move_) {
+            return MoveResult::Illegal;
+        }
+        MoveResult::Normal
     }
 
     fn execute_move(&mut self, move_: Move) -> Result<(), String> {
@@ -775,12 +797,54 @@ impl Board {
     pub fn is_stalemate(&self) -> bool {
         !self.is_in_check() && self.all_legal_moves().is_empty()
     }
+
+    fn is_promotion_move(&self, move_: Move) -> bool {
+        let Some(moving_piece) = self.piece_at_pos(move_.from()) else {
+            return false;
+        };
+        if !matches!(moving_piece.type_, PieceType::Pawn) {
+            return false;
+        }
+        let destination_rank = move_.to().rank;
+        destination_rank == 0 || destination_rank == 7
+    }
+
+    pub fn resolve_promotion(&mut self, piece_type: PieceType) -> Result<(), String> {
+        let Some(move_) = self.promotion_move else {
+            return Err("No promotion pending".to_string());
+        };
+
+        match piece_type {
+            PieceType::Queen | PieceType::Rook | PieceType::Bishop | PieceType::Knight => {}
+            _ => return Err("Invalid promotion piece".to_string()),
+        }
+
+        self.execute_move(move_)?;
+
+        let Some(pawn_piece) = self.piece_at_pos(move_.to()) else {
+            return Err("No piece at promotion square".to_string());
+        };
+
+        let promoted_piece = Piece {
+            type_: piece_type,
+            color: pawn_piece.color,
+        };
+
+        self.set(move_.to(), Some(promoted_piece))?;
+        self.promotion_move = None;
+
+        Ok(())
+    }
+
+    pub fn cancel_promotion(&mut self) {
+        self.promotion_move = None;
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
-        board::{Board, Position},
+        board::{Board, MoveResult, Position},
         piece::{Move, Piece, PieceColor, PieceType},
     };
 
@@ -842,7 +906,8 @@ mod tests {
         let queenside_castle = Move::new(Position::new(4, 7), Position::new(2, 7));
         assert!(board2.move_legal(queenside_castle));
 
-        board2.make_move(queenside_castle.from(), queenside_castle.to()).unwrap();
+        let result = board2.make_move(queenside_castle.from(), queenside_castle.to());
+        assert_eq!(result, MoveResult::Normal);
 
         let king_at_c8 = board2.piece_at_pos(Position::new(2, 7));
         assert!(matches!(
@@ -864,9 +929,8 @@ mod tests {
 
         // Test castling after rook capture - white king and rook, black knight captures rook
         let mut board3 = Board::from_fen("8/8/8/8/8/8/2n5/R3K3 b Q - 0 1").unwrap();
-        board3
-            .make_move(Position::new(2, 1), Position::new(0, 0))
-            .unwrap();
+        let result = board3.make_move(Position::new(2, 1), Position::new(0, 0));
+        assert_eq!(result, MoveResult::Normal);
 
         let queenside_castle = Move::new(Position::new(4, 0), Position::new(2, 0));
         assert!(!board3.move_legal(queenside_castle));
@@ -877,17 +941,15 @@ mod tests {
         // White pawn on e5, black pawn on f7
         let mut board = Board::from_fen("8/5p2/8/4P3/8/8/8/8 b - - 0 1").unwrap();
 
-        board
-            .make_move(Position::new(5, 6), Position::new(5, 4))
-            .unwrap();
+        let result = board.make_move(Position::new(5, 6), Position::new(5, 4));
+        assert_eq!(result, MoveResult::Normal);
 
         let en_passant_move = Move::new(Position::new(4, 4), Position::new(5, 5));
         assert!(board.is_move_en_passant(en_passant_move));
 
         let mut board2 = Board::from_fen("8/8/8/8/8/8/8/R7 w - - 0 1").unwrap();
-        board2
-            .make_move(Position::new(0, 0), Position::new(0, 1))
-            .unwrap();
+        let result = board2.make_move(Position::new(0, 0), Position::new(0, 1));
+        assert_eq!(result, MoveResult::Normal);
 
         assert!(!board2.is_move_en_passant(en_passant_move));
     }
@@ -904,5 +966,26 @@ mod tests {
         // Black king on b8, white king on b6, white pawn on b7
         let board = Board::from_fen("1k6/1P6/1K6/8/8/8/8/8 b - - 0 1").unwrap();
         assert!(board.is_stalemate());
+    }
+
+    #[test]
+    fn test_promotion() {
+        let mut board = Board::from_fen("8/P7/8/8/8/8/8/8 w - - 0 1").unwrap();
+        let result = board.make_move(Position::new(0, 6), Position::new(0, 7));
+        assert_eq!(result, MoveResult::Promotion);
+        board.resolve_promotion(PieceType::Queen).unwrap();
+        let piece = board.piece_at_pos(Position::new(0, 7)).unwrap();
+        assert_eq!(piece.type_, PieceType::Queen);
+
+        let mut board = Board::from_fen("1r6/P7/8/8/8/8/8/8 w - - 0 1").unwrap();
+        let result = board.make_move(Position::new(0, 6), Position::new(1, 7));
+        assert_eq!(result, MoveResult::Promotion);
+        board.resolve_promotion(PieceType::Rook).unwrap();
+        let piece = board.piece_at_pos(Position::new(1, 7)).unwrap();
+        assert_eq!(piece.type_, PieceType::Rook);
+
+        let mut board = Board::from_fen("8/8/P7/8/8/8/8/8 w - - 0 1").unwrap();
+        let result = board.make_move(Position::new(0, 5), Position::new(0, 7));
+        assert_eq!(result, MoveResult::Illegal);
     }
 }

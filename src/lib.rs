@@ -1,7 +1,8 @@
 mod board;
 mod piece;
 
-pub use board::{Board, Position};
+pub use board::{Board, MoveResult, Position};
+pub use piece::PieceType;
 
 #[cfg(test)]
 mod tests {
@@ -22,7 +23,8 @@ mod tests {
             .into_iter()
             .map(|move_| {
                 let mut new_board = board.clone();
-                new_board.make_move(move_.from(), move_.to()).unwrap();
+                let result = new_board.make_move(move_.from(), move_.to());
+                assert_eq!(result, MoveResult::Normal);
                 perft(&new_board, depth - 1)
             })
             .sum()

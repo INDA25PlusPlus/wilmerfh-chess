@@ -5,7 +5,7 @@
 ### Creating a board
 
 ```rust
-use lachess::{Board, Position};
+use lachess::{Board, Position, MoveResult, PieceType};
 
 // New game
 let mut board = Board::starting_position();
@@ -20,13 +20,21 @@ let mut board = Board::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w K
 ### Making moves
 
 ```rust
+
 // Positions use file (0-7) and rank (0-7)
 let from = Position::new(4, 1); // e2
 let to = Position::new(4, 3);   // e4
 
 match board.make_move(from, to) {
-    Ok(()) => println!("Move made"),
-    Err(msg) => println!("Illegal move: {}", msg),
+    MoveResult::Normal => println!("Move made"),
+    MoveResult::Promotion => {
+        println!("Pawn promotion!");
+        // Choose promotion piece
+        board.resolve_promotion(PieceType::Queen).unwrap();
+        // Or cancel the promotion
+        // board.cancel_promotion();
+    },
+    MoveResult::Illegal => println!("Illegal move"),
 }
 ```
 
