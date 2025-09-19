@@ -1,8 +1,7 @@
 mod board;
 mod piece;
 
-pub use board::Board;
-pub use piece::Move;
+pub use board::{Board, Position};
 
 #[cfg(test)]
 mod tests {
@@ -23,7 +22,7 @@ mod tests {
             .into_iter()
             .map(|move_| {
                 let mut new_board = board.clone();
-                new_board.make_move(move_).unwrap();
+                new_board.make_move(move_.from(), move_.to()).unwrap();
                 perft(&new_board, depth - 1)
             })
             .sum()

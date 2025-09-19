@@ -541,11 +541,22 @@ impl Board {
     }
 
     pub fn move_legal(&self, move_: Move) -> bool {
+        let Some(moving_piece) = self.piece_at_pos(move_.from()) else {
+            return false;
+        };
+        let current_color = match self.move_turn {
+            MoveTurn::White => PieceColor::White,
+            MoveTurn::Black => PieceColor::Black,
+        };
+        if moving_piece.color != current_color {
+            return false;
+        }
+
         if !self.move_pseudo_legal(move_) {
             return false;
         }
         let mut test_board = self.clone();
-        if let Err(_) = test_board.make_move(move_) {
+        if let Err(_) = test_board.execute_move(move_) {
             return false;
         }
 
@@ -633,7 +644,15 @@ impl Board {
         Ok(())
     }
 
-    pub fn make_move(&mut self, move_: Move) -> Result<(), String> {
+    pub fn make_move(&mut self, from: Position, to: Position) -> Result<(), String> {
+        let move_ = Move::new(from, to);
+        if !self.move_legal(move_) {
+            return Err("Illegal move".to_string());
+        }
+        self.execute_move(move_)
+    }
+
+    fn execute_move(&mut self, move_: Move) -> Result<(), String> {
         // Move the rook if castling
         if let Some(castling_side) = self.get_castling(move_) {
             let (rook_from_file, rook_to_file) = match castling_side {
@@ -830,7 +849,7 @@ mod tests {
         let queenside_castle = Move::new(Position::new(4, 7), Position::new(2, 7));
         assert!(board2.move_legal(queenside_castle));
 
-        board2.make_move(queenside_castle).unwrap();
+        board2.make_move(queenside_castle.from(), queenside_castle.to()).unwrap();
 
         let king_at_c8 = board2.piece_at_pos(Position::new(2, 7));
         assert!(matches!(
@@ -851,9 +870,9 @@ mod tests {
         ));
 
         // Test castling after rook capture - white king and rook, black knight captures rook
-        let mut board3 = Board::from_fen("8/8/8/8/8/8/6n1/R3K3 w Q - 0 1").unwrap();
+        let mut board3 = Board::from_fen("8/8/8/8/8/8/2n5/R3K3 b Q - 0 1").unwrap();
         board3
-            .make_move(Move::new(Position::new(6, 1), Position::new(0, 0)))
+            .make_move(Position::new(2, 1), Position::new(0, 0))
             .unwrap();
 
         let queenside_castle = Move::new(Position::new(4, 0), Position::new(2, 0));
@@ -863,10 +882,10 @@ mod tests {
     #[test]
     fn test_en_passant() {
         // White pawn on e5, black pawn on f7
-        let mut board = Board::from_fen("8/5p2/8/4P3/8/8/8/8 w - - 0 1").unwrap();
+        let mut board = Board::from_fen("8/5p2/8/4P3/8/8/8/8 b - - 0 1").unwrap();
 
         board
-            .make_move(Move::new(Position::new(5, 6), Position::new(5, 4)))
+            .make_move(Position::new(5, 6), Position::new(5, 4))
             .unwrap();
 
         let en_passant_move = Move::new(Position::new(4, 4), Position::new(5, 5));
@@ -874,7 +893,7 @@ mod tests {
 
         let mut board2 = Board::from_fen("8/8/8/8/8/8/8/R7 w - - 0 1").unwrap();
         board2
-            .make_move(Move::new(Position::new(0, 0), Position::new(0, 1)))
+            .make_move(Position::new(0, 0), Position::new(0, 1))
             .unwrap();
 
         assert!(!board2.is_move_en_passant(en_passant_move));
