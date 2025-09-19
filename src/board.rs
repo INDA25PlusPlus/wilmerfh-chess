@@ -602,6 +602,29 @@ impl Board {
             .collect()
     }
 
+    pub fn all_legal_moves(&self) -> Vec<Move> {
+        let current_color = match self.move_turn {
+            MoveTurn::White => PieceColor::White,
+            MoveTurn::Black => PieceColor::Black,
+        };
+
+        self.pieces
+            .iter()
+            .enumerate()
+            .filter(|(_index, piece)| piece.is_some())
+            .map(|(index, piece)| (index, piece.unwrap()))
+            .filter(|(_index, piece)| piece.color == current_color)
+            .map(|(index, _piece)| Position::from_index(index))
+            .map(|pos| {
+                self.legal_moves(pos)
+                    .into_iter()
+                    .map(|to_pos| Move::new(pos, to_pos))
+                    .collect::<Vec<Move>>()
+            })
+            .flatten()
+            .collect()
+    }
+
     fn move_piece(&mut self, from: Position, to: Position) -> Result<(), String> {
         let piece = self.piece_at_pos(from);
         self.set(to, piece)?;
