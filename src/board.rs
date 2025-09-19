@@ -13,7 +13,7 @@ pub struct CastlingRights {
 }
 
 impl CastlingRights {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             white_kingside: true,
             white_queenside: true,
@@ -22,7 +22,7 @@ impl CastlingRights {
         }
     }
 
-    pub fn can_castle(&self, color: PieceColor, kingside: bool) -> bool {
+    fn can_castle(&self, color: PieceColor, kingside: bool) -> bool {
         match (color, kingside) {
             (PieceColor::White, true) => self.white_kingside,
             (PieceColor::White, false) => self.white_queenside,
@@ -31,7 +31,7 @@ impl CastlingRights {
         }
     }
 
-    pub fn disable_king_castling(&mut self, color: PieceColor) {
+    fn disable_king_castling(&mut self, color: PieceColor) {
         match color {
             PieceColor::White => {
                 self.white_kingside = false;
@@ -44,7 +44,7 @@ impl CastlingRights {
         }
     }
 
-    pub fn disable_rook_castling(&mut self, color: PieceColor, kingside: bool) {
+    fn disable_rook_castling(&mut self, color: PieceColor, kingside: bool) {
         match (color, kingside) {
             (PieceColor::White, true) => self.white_kingside = false,
             (PieceColor::White, false) => self.white_queenside = false,
@@ -115,7 +115,7 @@ pub struct Board {
 }
 
 impl Board {
-    pub fn new(
+    fn new(
         pieces: [Option<Piece>; (BOARD_WIDTH * BOARD_HEIGHT) as usize],
         move_turn: MoveTurn,
         castling_rights: CastlingRights,
@@ -341,7 +341,15 @@ impl Board {
             })
     }
 
-    pub fn is_in_check(&self, color: PieceColor) -> bool {
+    pub fn is_in_check(&self) -> bool {
+        let current_color = match self.move_turn {
+            MoveTurn::White => PieceColor::White,
+            MoveTurn::Black => PieceColor::Black,
+        };
+        self.is_color_in_check(current_color)
+    }
+
+    fn is_color_in_check(&self, color: PieceColor) -> bool {
         let Some(king_pos) = self.find_king(color) else {
             return false;
         };
@@ -422,7 +430,7 @@ impl Board {
         }
     }
 
-    pub fn move_pseudo_legal(&self, move_: Move) -> bool {
+    fn move_pseudo_legal(&self, move_: Move) -> bool {
         if !move_.is_on_board() {
             return false;
         };
@@ -560,11 +568,7 @@ impl Board {
             return false;
         }
 
-        let moving_color = match self.move_turn {
-            MoveTurn::White => PieceColor::White,
-            MoveTurn::Black => PieceColor::Black,
-        };
-        !test_board.is_in_check(moving_color)
+        !test_board.is_color_in_check(current_color)
     }
 
     pub fn legal_moves(&self, pos: Position) -> Vec<Position> {
@@ -765,19 +769,11 @@ impl Board {
     }
 
     pub fn is_checkmate(&self) -> bool {
-        let current_color = match self.move_turn {
-            MoveTurn::White => PieceColor::White,
-            MoveTurn::Black => PieceColor::Black,
-        };
-        self.is_in_check(current_color) && self.all_legal_moves().is_empty()
+        self.is_in_check() && self.all_legal_moves().is_empty()
     }
 
     pub fn is_stalemate(&self) -> bool {
-        let current_color = match self.move_turn {
-            MoveTurn::White => PieceColor::White,
-            MoveTurn::Black => PieceColor::Black,
-        };
-        !self.is_in_check(current_color) && self.all_legal_moves().is_empty()
+        !self.is_in_check() && self.all_legal_moves().is_empty()
     }
 }
 
@@ -806,18 +802,15 @@ mod tests {
 
     #[test]
     fn test_is_in_check() {
-        // White king on e1, black rook on e8 attacking it
         let board = Board::from_fen("4r3/8/8/8/8/8/8/4K3 w - - 0 1").unwrap();
+        assert!(board.is_in_check());
 
-        // White king should be in check from black rook
-        assert!(board.is_in_check(PieceColor::White));
-
-        // Black should not be in check (no black king on board)
-        assert!(!board.is_in_check(PieceColor::Black));
+        let board_black = Board::from_fen("4k3/8/8/8/8/8/8/4R3 b - - 0 1").unwrap();
+        assert!(board_black.is_in_check());
 
         // White king on e1, black rook on e8, but white rook on e4 blocks the check
         let board2 = Board::from_fen("4r3/8/8/8/4R3/8/8/4K3 w - - 0 1").unwrap();
-        assert!(!board2.is_in_check(PieceColor::White));
+        assert!(!board2.is_in_check());
     }
 
     #[test]
