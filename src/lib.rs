@@ -2,7 +2,7 @@ mod board;
 mod piece;
 
 pub use board::{Board, MoveResult, Position};
-pub use piece::PieceType;
+pub use piece::{Piece, PieceColor, PieceType};
 
 #[cfg(test)]
 mod tests {
